@@ -32,8 +32,6 @@ const Home: React.FC = () => {
       </section>
 
       <section className="features-section">
-        <h2>AI Forensics Capabilities</h2>
-        <p className="section-sub">Eight ways AI transforms digital investigations</p>
         <div className="features-grid">
           {features.map((f) => (
             <div key={f.id} className={`feature-card ${f.active ? 'feature-card--active' : ''}`}>

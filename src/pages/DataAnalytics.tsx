@@ -1,7 +1,41 @@
-import React from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import './DataAnalytics.css';
 
+const ACCEPTED = ['.csv', '.json', '.log', '.txt'];
+
+function validateFile(file: File): string | null {
+  const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+  if (!ACCEPTED.includes(ext)) return `"${file.name}" is not a supported file type.`;
+  if (file.size > 50 * 1024 * 1024) return `"${file.name}" exceeds the 50 MB limit.`;
+  return null;
+}
+
 const DataAnalytics: React.FC = () => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = useCallback((file: File) => {
+    const err = validateFile(file);
+    if (err) { setError(err); setDroppedFile(null); return; }
+    setError(null);
+    setDroppedFile(file);
+  }, []);
+
+  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragging(true); };
+  const onDragLeave = () => setDragging(false);
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+  const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
+
   return (
     <div className="da-page">
       <div className="da-header">
@@ -17,12 +51,43 @@ const DataAnalytics: React.FC = () => {
         {/* Upload Panel */}
         <div className="da-panel">
           <h2 className="panel-title">📂 Evidence Input</h2>
-          <div className="upload-zone">
-            <div className="upload-icon">⬆️</div>
-            <p>Drag & drop dataset files here</p>
-            <span>.csv, .json, .log supported</span>
-            <button className="btn-upload">Browse Files</button>
+
+          {/* Hidden real file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.json,.log,.txt"
+            style={{ display: 'none' }}
+            onChange={onFileInput}
+          />
+
+          <div
+            className={`upload-zone ${dragging ? 'upload-zone--active' : ''} ${droppedFile ? 'upload-zone--loaded' : ''}`}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="upload-icon">{droppedFile ? '✅' : '⬆️'}</div>
+            {droppedFile ? (
+              <>
+                <p className="upload-filename">{droppedFile.name}</p>
+                <span>{(droppedFile.size / 1024).toFixed(1)} KB · click to replace</span>
+              </>
+            ) : (
+              <>
+                <p>Drag &amp; drop a dataset file here</p>
+                <span>or click to browse</span>
+              </>
+            )}
+            <div className="upload-formats">
+              <span className="fmt-tag">.csv</span>
+              <span className="fmt-tag">.json</span>
+              <span className="fmt-tag">.log</span>
+              <span className="fmt-tag">.txt</span>
+            </div>
           </div>
+          {error && <p className="upload-error">{error}</p>}
 
           <div className="config-section">
             <h3>Analysis Options</h3>
