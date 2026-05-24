@@ -14,12 +14,7 @@ const Navbar: React.FC = () => {
       <ul className="navbar-links">
         <li>
           <Link to="/" className={location.pathname === '/' ? 'active' : ''}>
-            Home
-          </Link>
-        </li>
-        <li>
-          <Link to="/analytics" className={location.pathname === '/analytics' ? 'active' : ''}>
-            Data Analytics
+            Disk Forensics
           </Link>
         </li>
         <li>
