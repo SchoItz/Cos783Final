@@ -1,10 +1,15 @@
-// Minimal, dependency-free Isolation Forest (unsupervised anomaly detection).
-// Implementation of Liu, Ting & Zhou (2008) "Isolation Forest".
+// Isolation Forest, written from scratch — no ML libraries.
 //
-// A point is "isolated" by recursively partitioning the feature space along
-// random attributes at random split values. Anomalies, being few and different,
-// require fewer splits to isolate — so they end up with a shorter expected
-// path length and therefore a higher anomaly score.
+// Original paper: Liu, Ting & Zhou (2008), "Isolation Forest", ICDM.
+// The trick: instead of trying to model what "normal" looks like (which is the
+// hard part), we just see how easily a point can be isolated from the rest.
+// Build a bunch of random binary trees that pick a random feature and a random
+// split value at each node. Anomalies, being few and weird, end up with a
+// shorter path to a leaf. That's the whole intuition.
+//
+// We use it here to score 512-byte disk sectors against each other — a sector
+// that "isolates fast" looks different from the rest of the disk on its
+// feature vector, and is worth an investigator's attention.
 
 type Row = number[];
 
@@ -17,6 +22,9 @@ interface Node {
   depth: number;
 }
 
+// Build one isolation tree by recursively splitting on a random attribute.
+// Stops when we run out of depth, run out of points, or the chosen attribute
+// is constant across the sub-sample (no useful split exists).
 function buildTree(data: Row[], depth: number, maxDepth: number): Node {
   const n = data.length;
   if (depth >= maxDepth || n <= 1) return { size: n, depth };
@@ -47,11 +55,14 @@ function buildTree(data: Row[], depth: number, maxDepth: number): Node {
   };
 }
 
-// c(n) — average path length of an unsuccessful search in a BST,
-// used to normalise per-tree path lengths (Liu et al. 2008, eq. 1).
+// Average path length of an unsuccessful search in a BST of n items.
+// Straight out of the paper (eq. 1). Used to normalise raw path lengths so the
+// final score sits in a useful [0, 1] range regardless of the sub-sample size.
 const c = (n: number): number =>
   n <= 1 ? 0 : 2 * (Math.log(n - 1) + 0.5772156649) - (2 * (n - 1)) / n;
 
+// Walk a single point down a tree and report the depth at which it lands.
+// If we hit an external node, add c(size) to account for the unbuilt sub-tree.
 function pathLength(row: Row, node: Node): number {
   if (node.splitAttr === undefined) return node.depth + c(node.size);
   return row[node.splitAttr] < (node.splitVal as number)
@@ -61,7 +72,15 @@ function pathLength(row: Row, node: Node): number {
 
 /**
  * Score every row with the Isolation Forest anomaly score in [0, 1].
- * Higher = more anomalous. Scores ≈ 0.5 indicate "no clear signal".
+ *
+ *   ~ 1.0  -> very likely an anomaly (isolated quickly)
+ *   ~ 0.5  -> no real signal either way
+ *   ~ 0.0  -> almost certainly "normal" (had to go deep to isolate)
+ *
+ * Defaults of 100 trees and a sub-sample of 256 are the values the original
+ * paper recommends. Sub-sampling is actually a feature, not a workaround:
+ * fewer points per tree means anomalies stay anomalies and don't get masked
+ * by the bulk of the data ("swamping").
  */
 export function isolationForestScores(
   data: Row[],
@@ -74,6 +93,7 @@ export function isolationForestScores(
   const psi = Math.min(sampleSize, n);
   const maxDepth = Math.ceil(Math.log2(Math.max(psi, 2)));
 
+  // Grow the forest. Each tree gets its own random sub-sample with replacement.
   const trees: Node[] = [];
   for (let t = 0; t < nTrees; t++) {
     const sample: Row[] = [];

@@ -5,114 +5,121 @@ const About: React.FC = () => {
   return (
     <div className="about-page">
       <div className="about-container">
-        <span className="about-badge">COS783 — Digital Forensics 2026</span>
-        <h1>About This Project</h1>
+        <span className="about-badge">COS783 — Digital Forensics, 2026</span>
+        <h1>About this project</h1>
 
         <div className="about-card">
-          <h2>Overview</h2>
+          <h2>What we built and why</h2>
           <p>
-            This project demonstrates AI capability <strong>#2 — Metadata Analysis</strong> applied to
-            disk-image forensics: <strong>unsupervised anomaly detection</strong> that flags suspicious
-            regions and indicators an investigator should examine first. A bonus page also explores
-            capability #7 (Data Analytics) over a public DFIR-tool dataset.
+            For the final assignment we picked AI capability <strong>#2 &mdash; Metadata Analysis</strong>,
+            and we read it the way the brief actually frames it: <em>"pattern recognition,
+            anomaly detection, and correlation analysis &hellip; identify suspicious patterns
+            or outliers."</em> So we built a browser-based disk-image triage tool that does
+            exactly that &mdash; two unsupervised anomaly-detection models running over the
+            raw bytes of a disk image, with proper chain-of-custody hashing wrapped around
+            them. The bonus page also has a small play with capability #7 (Data Analytics)
+            on a public DFIR-tool dataset.
           </p>
         </div>
 
         <div className="about-card">
-          <h2>What It Does</h2>
+          <h2>What it does, end to end</h2>
           <ul className="feature-list">
-            <li>Chain-of-custody hashing (MD5, SHA-1, SHA-256) recorded before and after analysis</li>
-            <li>MBR boot-signature validation, disk-signature extraction, and partition-table parsing</li>
-            <li>Printable-string extraction and Indicator-of-Compromise (IOC) mining (IPs, URLs, registry keys, paths)</li>
-            <li>Malware/post-exploitation keyword scanning</li>
-            <li><strong>Adaptive Shannon-entropy anomaly detection</strong> (per-disk 3&sigma; control limit)</li>
-            <li><strong>Hand-written Isolation Forest</strong> ranking sectors over a multivariate feature space</li>
-            <li>Automated risk scoring and a ranked, severity-coded findings report</li>
-            <li>Post-analysis integrity verification confirming the evidence was not modified</li>
+            <li>Hashes the evidence three ways (MD5, SHA-1, SHA-256) before and after analysis &mdash; that's our chain of custody.</li>
+            <li>Validates the MBR boot signature, extracts the disk signature, and parses the four-entry partition table by hand.</li>
+            <li>Sniffs the volume boot record for known file-system magic bytes (NTFS, FAT, exFAT, ext2/3/4, HFS+).</li>
+            <li>Pulls printable strings out of the image and mines them for IOCs (IPs, URLs, registry keys, Windows / UNC / Linux paths, hashes).</li>
+            <li>Scans those strings for the names of known malware tools and common post-exploitation command patterns.</li>
+            <li>Runs the <strong>adaptive entropy detector</strong> &mdash; a 3&sigma; rule fitted to this disk's own entropy distribution.</li>
+            <li>Runs our <strong>Isolation Forest</strong> over a seven-feature vector per sector.</li>
+            <li>Scores everything into a single risk number with severity-coded findings.</li>
+            <li>Re-hashes the evidence at the end and tells you whether the chain of custody held.</li>
           </ul>
         </div>
 
         <div className="about-card">
-          <h2>AI Method</h2>
+          <h2>How the AI bit actually works</h2>
           <p>
-            <strong>Unsupervised anomaly detection — two complementary models, no training data required.</strong>
+            Two complementary unsupervised models. Neither needs training data. Both are
+            fitted fresh on every disk you drop in.
           </p>
           <ul className="feature-list">
             <li>
-              <strong>Adaptive entropy baseline.</strong> The tool learns each disk&rsquo;s own
-              entropy distribution (mean &mu; and standard deviation &sigma;) and flags any
-              sampled sector whose entropy exceeds a 3&sigma; upper control limit
-              (z-score &ge; 3). Absolute entropy bands then label the likely cause:
-              encryption/ransomware (&gt; 7.6 bits/byte) vs. packing/compression (7.2&ndash;7.6).
+              <strong>Adaptive entropy baseline.</strong> We work out the mean and standard
+              deviation of Shannon entropy across this disk's sectors, then flag anything
+              that sits three or more standard deviations above that mean. The maths is
+              old (Shewhart control charts, applied to information entropy), but it works
+              because every disk has its own "normal" &mdash; a fresh Linux install looks
+              nothing like a heavily-used Windows machine, and a fixed threshold would lie
+              about both. Absolute entropy bands then label the likely cause: above
+              7.6&nbsp;bits/byte usually means encryption; 7.2&ndash;7.6 is more often packed
+              or compressed code.
             </li>
             <li>
-              <strong>Isolation Forest.</strong> A from-scratch implementation of Liu, Ting &amp; Zhou&rsquo;s
-              algorithm scores each sector over a 7-dimensional feature vector
-              [entropy, mean byte value, zero-byte ratio, printable-byte ratio, longest zero
-              run, distinct-byte ratio, byte-pair (bigram) entropy]. Sectors that isolate
-              quickly in random trees receive a high anomaly score; the top percentile is
-              surfaced as a multivariate ML finding that does not rely on absolute entropy
-              thresholds alone. The tool full-scans the disk where feasible (capped at 10 000
-              sectors so the model stays interactive).
+              <strong>Isolation Forest.</strong> Liu, Ting and Zhou's 2008 algorithm,
+              written from scratch in TypeScript (no ML library). For each sector we build
+              a seven-dimensional feature vector: entropy, mean byte value, zero-byte ratio,
+              printable-byte ratio, longest zero run, distinct-byte ratio, and byte-pair
+              entropy. The forest grows 100 random binary trees. Anomalies isolate quickly,
+              so they end up with a shorter average path length and a higher score &mdash;
+              we flag the top five percent. The point of having a second model is that the
+              entropy detector only sees one feature; the forest catches sectors that look
+              strange across the whole set.
             </li>
           </ul>
         </div>
 
         <div className="about-card">
-          <h2>Technology Stack</h2>
+          <h2>What we used to build it</h2>
           <ul className="tech-list">
-            <li><span className="tech-tag">React 19</span> Frontend UI library</li>
-            <li><span className="tech-tag">TypeScript</span> Type-safe JavaScript</li>
-            <li><span className="tech-tag">React Router 7</span> Client-side navigation</li>
-            <li><span className="tech-tag">Web Crypto API</span> Browser-native SHA-1 / SHA-256</li>
-            <li><span className="tech-tag">Hand-written MD5</span> RFC 1321 reference implementation</li>
-            <li><span className="tech-tag">Custom MBR parser</span> Partition table + FS-signature detection</li>
-            <li><span className="tech-tag">Custom entropy + IOC engines</span> Sector-sampled Shannon entropy, regex-driven IOC mining</li>
-            <li><span className="tech-tag">Custom Isolation Forest</span> Dependency-free unsupervised ML</li>
-            <li><span className="tech-tag">Python (offline)</span> Reproducible demo-image generator</li>
+            <li><span className="tech-tag">React 19</span> UI</li>
+            <li><span className="tech-tag">TypeScript</span> the whole codebase</li>
+            <li><span className="tech-tag">React Router 7</span> page navigation</li>
+            <li><span className="tech-tag">Web Crypto API</span> browser-native SHA-1 / SHA-256</li>
+            <li><span className="tech-tag">Hand-written MD5</span> straight off RFC 1321</li>
+            <li><span className="tech-tag">Our own MBR parser</span> partition table + FS signature detection</li>
+            <li><span className="tech-tag">Our own entropy + IOC engines</span> Shannon entropy on sampled sectors, regex IOC mining</li>
+            <li><span className="tech-tag">Our own Isolation Forest</span> no ML library, no dependencies</li>
+            <li><span className="tech-tag">Python (offline)</span> reproducible demo-image generator</li>
           </ul>
         </div>
 
         <div className="about-card">
-          <h2>Team &amp; Responsibilities</h2>
+          <h2>Who did what</h2>
           <ul className="feature-list">
             <li>
               <strong>Fran&ccedil;ois Scholtz &mdash; u1924232</strong>
               <br />
-              <em>Forensic acquisition &amp; disk-structure engine.</em> Chain-of-custody
-              hashing pipeline (hand-written MD5 + Web-Crypto SHA-1/256), MBR boot-signature
-              validation, partition-table parser, and file-system signature detection.
+              <em>Acquisition and disk-structure engine.</em> The chain-of-custody hashing
+              pipeline (including the from-scratch MD5), the MBR boot-signature validation,
+              the partition-table parser, and the file-system signature detection.
             </li>
             <li>
               <strong>Galen Myburgh &mdash; u21504645</strong>
               <br />
-              <em>AI / anomaly-detection engine.</em> Sector-sampled Shannon-entropy engine,
-              adaptive per-disk 3&sigma; baseline, the from-scratch Isolation Forest, the
-              IOC + malware-keyword scanners, and the risk-scoring / findings builder.
+              <em>AI and anomaly-detection engine.</em> The sector-sampled Shannon-entropy
+              engine, the adaptive 3&sigma; baseline, the Isolation Forest implementation,
+              the IOC and malware-keyword scanners, and the risk-scoring / findings builder.
             </li>
             <li>
               <strong>Hendr&eacute; Beyer &mdash; u26846188</strong>
               <br />
-              <em>Application &amp; presentation layer.</em> React/TypeScript application
-              structure, routing, drag-and-drop analysis pipeline, results UI (entropy bar
-              chart, Isolation Forest chart, severity-coded findings, integrity panel), and
-              the Python demo-image generator + project documentation.
+              <em>Application and presentation layer.</em> The React / TypeScript app
+              structure, routing, the drag-and-drop analysis pipeline, the results UI
+              (entropy bar chart, Isolation Forest chart, severity-coded findings, the
+              integrity panel), and the Python demo-image generator plus the project
+              documentation.
             </li>
           </ul>
         </div>
 
         <div className="about-card">
-          <h2>Limitations &amp; Future Work</h2>
+          <h2>What we'd still like to add</h2>
           <ul className="feature-list">
-            <li>Analysis is single-pass over a sampled sector subset; full-image scanning would
-                improve recall at the cost of in-browser memory.</li>
-            <li>The Isolation Forest currently uses seven hand-engineered features; sector-locality
-                correlation (cross-sector context windows) and higher-order n-gram features would
-                sharpen detection of partially encrypted or obfuscated regions.</li>
-            <li>Findings are presented in-app; a signed, exportable PDF/JSON report would
-                strengthen evidentiary use.</li>
-            <li>No file-carving or deleted-file recovery; integrating a JavaScript port of
-                The Sleuth Kit would extend the tool toward a full triage suite.</li>
+            <li>Cross-sector context windows for the Isolation Forest &mdash; right now each sector is judged in isolation; correlating neighbours would catch partial-encryption attacks more cleanly.</li>
+            <li>Higher-order n-gram features (3- and 4-byte) for the same reason.</li>
+            <li>A signed, exportable PDF report so the findings have evidentiary weight outside the browser.</li>
+            <li>File-aware analysis &mdash; walking the NTFS MFT or ext4 inodes &mdash; to extend triage into proper file-level metadata anomaly detection.</li>
           </ul>
         </div>
       </div>

@@ -1,8 +1,11 @@
 import { isolationForestScores } from './ai/isolationForest';
 
-// Smoke test: a clear outlier in a tight Gaussian cluster should receive
-// a higher Isolation Forest anomaly score than the cluster members.
-test('isolation forest assigns higher score to an obvious outlier', () => {
+// Quick sanity check on the Isolation Forest: drop a single obvious outlier
+// into a tight Gaussian-ish cluster and make sure the outlier gets a higher
+// anomaly score than the cluster members. If this ever breaks, something
+// fundamental in the IF is wrong.
+test('isolation forest scores an obvious outlier higher than the cluster', () => {
+  // Tiny seeded PRNG so the test is reproducible (Jest doesn't seed Math.random).
   const rng = (seed: number) => {
     let s = seed >>> 0;
     return () => {
@@ -11,15 +14,14 @@ test('isolation forest assigns higher score to an obvious outlier', () => {
     };
   };
   const rand = rng(42);
+
   const data: number[][] = [];
   for (let i = 0; i < 200; i++) {
     data.push([rand() * 0.1, rand() * 0.1, rand() * 0.1, rand() * 0.1]);
   }
-  // Add one obvious outlier far from the cluster
-  data.push([10, 10, 10, 10]);
+  data.push([10, 10, 10, 10]); // the obvious outlier
 
   const scores = isolationForestScores(data, 100, 64);
-
   const outlierScore = scores[scores.length - 1];
   const meanCluster = scores.slice(0, 200).reduce((a, b) => a + b, 0) / 200;
 

@@ -1,47 +1,60 @@
-"""make_demo_image.py — build a small .dd image that triggers the app's findings.
+"""Builds the sample disk image we use to demo the forensic tool.
 
-Generates an 8 MB raw disk image containing:
-  * A valid MBR (boot signature 0x55AA, disk signature, one bootable NTFS partition)
-  * An NTFS OEM-ID at offset 3 so the in-browser FS detector reports NTFS
-  * A 2 MB high-entropy region (pseudo-random bytes) to trigger the adaptive
-    entropy 3σ anomaly + the Isolation Forest multivariate anomaly
-  * Malware/post-exploitation keyword strings (mimikatz, powershell -enc, …)
-  * Indicators of Compromise (public IPv4, URL, registry key, Windows path, UNC, Linux path)
+We needed a small, predictable .dd file that would actually trigger every finding
+the app can produce — a valid MBR so the parser has something to chew on, an NTFS
+signature so the FS sniffer fires, a chunk of high-entropy data so both the
+adaptive entropy detector and the Isolation Forest light up, and some strings
+embedded in plaintext so the IOC miner and the malware-keyword scanner have
+something to find.
 
-Run:    python make_demo_image.py
-Output: sample_evidence.dd   (drag-and-drop into the app)
+Run it once:
+
+    python make_demo_image.py
+
+Then drag the resulting sample_evidence.dd onto the app's drop zone.
+
+Worth knowing: the high-entropy region is filled with os.urandom() each time
+this is run, so the file's hash changes on every regeneration. That's fine —
+the app's chain-of-custody check uses the pre-analysis and post-analysis hashes
+from a single session, so they always match for that run.
 """
 
 import os
 import struct
 
 OUT = "sample_evidence.dd"
-SIZE = 8 * 1024 * 1024  # 8 MB
+SIZE = 8 * 1024 * 1024  # 8 MB is enough to be realistic without making the demo slow
 
 img = bytearray(SIZE)
 
-# --- MBR ---------------------------------------------------------------------
-# NTFS OEM-ID at offset 3 (the app's parseMBR checks this exact location)
+# ----- Master Boot Record --------------------------------------------------
+# Putting "NTFS    " at offset 3 — the app's MBR parser checks that exact spot
+# to identify the file system. Eight bytes, space-padded.
 img[3:11] = b"NTFS    "
 
-# Disk signature at offsets 440-443
+# Disk signature lives at bytes 440 to 443. Easy to spot in the output too.
 img[440:444] = b"\xDE\xAD\xBE\xEF"
 
-# One primary partition entry at offset 446: bootable (0x80), type 0x07 (NTFS),
-# starts at LBA 2048, fills the rest of the image.
+# One primary partition entry at offset 446. 16 bytes: status, CHS start (we
+# don't bother with CHS, the app reads LBA), partition type, CHS end, start
+# LBA, size in sectors.
 part = bytearray(16)
-part[0] = 0x80                                          # active / bootable
-part[4] = 0x07                                          # NTFS / exFAT
-struct.pack_into("<I", part, 8,  2048)                  # start LBA
-struct.pack_into("<I", part, 12, (SIZE // 512) - 2048)  # size in sectors
+part[0] = 0x80                                          # 0x80 = bootable
+part[4] = 0x07                                          # 0x07 = NTFS / exFAT
+struct.pack_into("<I", part, 8,  2048)                  # start at LBA 2048
+struct.pack_into("<I", part, 12, (SIZE // 512) - 2048)  # fill the rest of the disk
 img[446:462] = part
 
-# Boot signature
+# 0x55 0xAA at the very end of the sector — the magic bytes that say
+# "yes, this really is an MBR".
 img[510] = 0x55
 img[511] = 0xAA
 
-# --- Plaintext region with malware keywords + IOCs ---------------------------
-# Lives inside the first 10 MB so the app's string-extraction pass picks it up.
+# ----- Plaintext region with IOCs and malware keywords ---------------------
+# We drop this near the start of the image so the string extractor (which only
+# scans the first 10 MB) is guaranteed to see it. The content mixes things the
+# tool should flag (IOCs, malware tool names, suspicious shell commands) with
+# enough chatter to feel realistic.
 text = (
     "User logged in. Routine activity.\n"
     "C:\\Users\\suspect\\Downloads\\invoice.pdf opened\n"
@@ -58,9 +71,11 @@ text = (
 encoded = text.encode()
 img[600 : 600 + len(encoded)] = encoded
 
-# --- High-entropy "encrypted" region -----------------------------------------
-# 2 MB of /dev/urandom-style bytes => sectors here saturate near 8.0 bits/byte
-# and are statistical outliers vs. the rest of the (mostly-zero) disk.
+# ----- High-entropy "encrypted" region -------------------------------------
+# 2 MB of cryptographic randomness, sitting in the middle of the disk. This
+# is the bit the AI is meant to spot: every sector in this range saturates
+# near 8 bits/byte of Shannon entropy, which is way above the disk's overall
+# baseline (most of the disk is still zero-padded).
 enc_start = 3 * 1024 * 1024
 enc = os.urandom(2 * 1024 * 1024)
 img[enc_start : enc_start + len(enc)] = enc
