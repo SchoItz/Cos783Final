@@ -32,6 +32,7 @@ Tick these off first.
   - `src/pages/DiskForensics.tsx`
 - [ ] Terminal pane open inside VS Code, sitting in the project root
 - [ ] Any old `sample_evidence.dd` deleted so we can show the generator run
+- [ ] `sample_forensic_tools.jsonl` handy in Finder (only if doing the Data Analytics bonus)
 - [ ] Browser sitting on the Home page (`/`)
 - [ ] One full dry run done end-to-end with a stopwatch — under 5:00
 
@@ -164,11 +165,40 @@ python3 make_demo_image.py
 **HENDRÉ:**
 
 > "And **Phase 4** re-hashes the image — all three match, so the chain of
-> custody held and nothing was modified."
+> custody held and nothing was modified. François will quickly show our bonus
+> page before we wrap up."
 
 ---
 
-### 3:30 – 3:50 · Close — ALL THREE (20s)
+### 3:30 – 4:05 · Bonus — Data Analytics, capability #7 (35s) — FRANÇOIS · OPTIONAL
+
+> **Optional segment.** This earns the bonus marks and gives François a second
+> turn, but it pushes the runtime to ~4:25. If your dry run is already tight,
+> drop this block and go straight to the close — the main demo stands on its own.
+
+*Click **Data Analytics** in the navbar to open `/analytics`. The bundled dataset is already loaded.*
+
+**FRANÇOIS:**
+
+> "On top of the main tool we also built a small bonus around capability number
+> seven, Data Analytics. It loads a dataset of forensic tools and does pattern
+> recognition over it — counting platforms, and auto-classifying each tool into
+> a category from its description. Right now it's showing the 50-tool set we
+> bundled with the app."
+
+*Drag `sample_forensic_tools.jsonl` onto the upload zone on the left.*
+
+**FRANÇOIS:**
+
+> "But it's not hard-coded — I can drop in a completely different dataset and it
+> re-analyses on the spot. You can see the tool count jump to 52, the platform
+> bars redraw — Linux and Windows leading — and the category breakdown updates,
+> from disk forensics through memory, network and mobile. Same idea as the main
+> tool: let the data tell us the pattern. Back to the team to close."
+
+---
+
+### 4:05 – 4:25 · Close — ALL THREE (20s)
 
 *Scroll back up so the red **CRITICAL** risk banner is on screen.*
 
@@ -193,14 +223,21 @@ python3 make_demo_image.py
 | Phase 1 + Phase 2 | François | 0:45 | 1:45 |
 | Phase 3 (AI) | Galen | 1:10 | 2:55 |
 | Findings, IOCs, integrity | Hendré | 0:35 | 3:30 |
-| Three-way close | All | 0:20 | 3:50 |
+| *Bonus — Data Analytics (optional)* | *François* | *0:35* | *4:05* |
+| Three-way close | All | 0:20 | 3:50 *(or 4:25 with bonus)* |
 
-Target is **~3:50 of talking**, which lands around 4:00–4:15 at a relaxed pace
-and leaves roughly a minute of buffer under the 5:00 cap. So if anyone slows
-down, pauses, or the analysis takes a moment, you're still safe. Speaking time
-per person: Hendré ~1:55, François ~0:45, Galen ~1:10. If you want François to
-have a bit more, let him open Phase 3 with one sentence on why anomaly
-detection matters for triage.
+**Two ways to run it:**
+
+- **Without the bonus** — finishes around **3:50**, lands at ~4:00–4:15 at a
+  relaxed pace. Roughly a minute of buffer under the 5:00 cap.
+- **With the bonus** — finishes around **4:25**, lands at ~4:35–4:45. Still
+  inside the cap, and it picks up the bonus marks. Use this if your dry run is
+  comfortable.
+
+Speaking time per person without the bonus: Hendré ~1:55, François ~0:45,
+Galen ~1:10. With the bonus, François goes up to ~1:20, which evens things out
+nicely. Either way you've got headroom — if anyone slows down or the analysis
+takes a beat, you're still under five minutes.
 
 ---
 
@@ -215,7 +252,8 @@ Every line on the rubric has to show up somewhere on tape. Use this to verify.
 - [ ] **Understanding of AI capability (5)** — Galen walks through both algorithms with reasoning, formulas referenced
 - [ ] **Data preprocessing (5)** — Python image generator (0:25–1:00) + seven-feature vector explanation (1:45–2:55)
 - [ ] **Output and presentation (10)** — every panel of the polished UI on screen from 1:00 onward
-- [ ] **All three speakers on tape** — handoffs at 1:00, 1:45, 2:55, 3:30
+- [ ] **Bonus (5)** — Data Analytics page shown, a second dataset dropped in live (only if doing the optional segment)
+- [ ] **All three speakers on tape** — handoffs at 1:00, 1:45, 2:55, 3:30 (and 4:05 if running the bonus)
 
 ---
 
