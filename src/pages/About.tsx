@@ -88,21 +88,24 @@ const About: React.FC = () => {
           <h2>Who did what</h2>
           <ul className="feature-list">
             <li>
-              <strong>Fran&ccedil;ois Scholtz &mdash; u19024232</strong>
+              <strong>Fran&ccedil;ois Scholtz</strong>
+              <span className="student-number">u19024232</span>
               <br />
               <em>Acquisition and disk-structure engine.</em> The chain-of-custody hashing
               pipeline (including the from-scratch MD5), the MBR boot-signature validation,
               the partition-table parser, and the file-system signature detection.
             </li>
             <li>
-              <strong>Galen Myburgh &mdash; u21504645</strong>
+              <strong>Galen Myburgh</strong>
+              <span className="student-number">u21504645</span>
               <br />
               <em>AI and anomaly-detection engine.</em> The sector-sampled Shannon-entropy
               engine, the adaptive 3&sigma; baseline, the Isolation Forest implementation,
               the IOC and malware-keyword scanners, and the risk-scoring / findings builder.
             </li>
             <li>
-              <strong>Hendr&eacute; Beyer &mdash; u26846188</strong>
+              <strong>Hendr&eacute; Beyer</strong>
+              <span className="student-number">u26846188</span>
               <br />
               <em>Application and presentation layer.</em> The React / TypeScript app
               structure, routing, the drag-and-drop analysis pipeline, the results UI
