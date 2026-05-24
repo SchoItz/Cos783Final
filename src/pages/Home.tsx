@@ -7,15 +7,18 @@ const Home: React.FC = () => {
     <div className="home">
       <section className="hero">
         <div className="hero-content">
-          <span className="hero-badge">COS783 Final Assignment</span>
-          <h1>Digital Forensics <span className="highlight">AI</span> Platform</h1>
+          <span className="hero-badge">COS783 — Digital Forensics 2026</span>
+          <h1>AI-Assisted <span className="highlight">Disk Forensics</span></h1>
           <p className="hero-sub">
-            Demonstrating how artificial intelligence enhances digital forensic investigation
-            through automated pattern recognition, machine learning, and data analytics.
+            AI capability <strong>#2 — Metadata Analysis</strong>: unsupervised anomaly detection
+            applied to disk-image triage. Chain-of-custody hashing, MBR/partition parsing,
+            IOC + malware-keyword extraction, adaptive entropy baselining, and a hand-written
+            Isolation Forest score each sector to surface what an investigator should examine first.
           </p>
           <div className="hero-actions">
-            <Link to="/analytics" className="btn-primary">Launch Data Analytics</Link>
-            <Link to="/about" className="btn-secondary">Learn More</Link>
+            <Link to="/forensics" className="btn-primary">Launch Disk Forensics</Link>
+            <Link to="/analytics" className="btn-secondary">Bonus: Data Analytics</Link>
+            <Link to="/about" className="btn-secondary">About</Link>
           </div>
         </div>
       </section>

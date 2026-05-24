@@ -182,7 +182,7 @@ const DataAnalytics: React.FC = () => {
   return (
     <div className="da-page">
       <div className="da-header">
-        <span className="da-badge">Feature #7 · Data Analytics</span>
+        <span className="da-badge">Bonus · Data Analytics (#7)</span>
         <h1>Forensic Toolkit <span className="da-highlight">Analyser</span></h1>
         <p>
           AI-assisted pattern recognition across the{' '}

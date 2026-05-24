@@ -1,46 +1,74 @@
-# Getting Started with Create React App
+# ForensicAI — AI-Assisted Disk Forensics (COS783 / DF 2026)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A browser-based digital-forensics triage tool demonstrating **AI capability #2 — Metadata Analysis (anomaly detection)**.
+Drop a disk image and the tool performs chain-of-custody hashing, MBR/partition parsing, IOC + malware-keyword
+extraction, **adaptive Shannon-entropy anomaly detection**, and ranking with a **hand-written Isolation Forest** —
+producing a severity-coded, risk-scored findings report and a post-analysis integrity check.
 
-## Available Scripts
+## AI method
 
-In the project directory, you can run:
+**Unsupervised anomaly detection — two complementary models.**
 
-### `npm start`
+1. **Adaptive entropy baseline.** The tool learns each disk's own entropy distribution (mean μ and standard
+   deviation σ) and flags sampled sectors whose entropy exceeds a 3σ upper control limit (z-score ≥ 3).
+   Absolute entropy bands then label the likely cause: encryption/ransomware (> 7.6 bits/byte) vs.
+   packing/compression (7.2–7.6).
+2. **Isolation Forest.** A from-scratch implementation of Liu, Ting & Zhou's algorithm scores each sampled
+   sector over a feature vector `[entropy, mean byte value, zero-byte ratio, printable-byte ratio]`.
+   Sectors that isolate quickly in random trees receive a high anomaly score; the top percentile is
+   surfaced as a multivariate ML finding.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+## Run
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+```bash
+npm install
+npm start            # http://localhost:3000
+```
 
-### `npm test`
+Build for production:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+CI=true npm run build
+```
 
-### `npm run build`
+## Demo data
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+A reproducible 8 MB demo image with a valid MBR, an NTFS signature, a high-entropy
+"encrypted" region, malware-keyword strings, and IOCs:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+python make_demo_image.py    # creates sample_evidence.dd → drag into the app
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+`*.dd` images are git-ignored; the generator script is committed for reproducibility.
 
-### `npm run eject`
+## Features
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+- Chain-of-custody hashing (MD5, SHA-1, SHA-256) recorded before and after analysis
+- MBR boot-signature validation, disk-signature extraction, partition-table parsing
+- Printable-string extraction + IOC mining (IPs, URLs, registry keys, paths, hashes)
+- Malware / post-exploitation keyword scanning
+- Adaptive Shannon-entropy anomaly detection (per-disk 3σ control limit)
+- Hand-written Isolation Forest over multivariate sector features
+- Automated risk scoring and severity-coded findings report
+- Post-analysis integrity verification (chain-of-custody confirmation)
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Tech stack
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+React 19, TypeScript, React Router 7, Web Crypto API, custom MBR/partition parser,
+hand-written MD5 (RFC 1321), custom entropy + IOC engines, hand-written Isolation Forest.
+Python is used only **offline** to generate the demo disk image; the app itself is 100% in-browser.
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+## Own code
 
-## Learn More
+The entire React/TypeScript application, the MD5 implementation, the MBR/partition parser,
+the Shannon-entropy engine, the IOC + keyword scanners, the adaptive baseline / z-score
+logic, and the Isolation Forest are written by the team. The only third-party runtime
+dependencies are React, React Router, and the browser-native Web Crypto API. We estimate
+**> 95 %** of the application code (forensic + AI logic, UI, routing, styles) is our own.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Team
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+- François Scholtz — **u1924232**
+- Galen Myburgh — **u21504645**
+- Hendré Beyer — **u26846188**

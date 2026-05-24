@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
+import { isolationForestScores } from '../ai/isolationForest';
 import './DiskForensics.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -14,7 +15,20 @@ interface MBRInfo {
   partitions: PartitionEntry[]; fsSignature: string | null;
 }
 interface IOCEntry  { type: string; value: string; count: number; severity: Severity; }
-interface EntropyPt { sectorIdx: number; offsetMB: number; entropy: number; }
+interface EntropyPt {
+  sectorIdx: number;
+  offsetMB: number;
+  entropy: number;
+  z: number;          // z-score against this disk's own entropy baseline
+  ifScore: number;    // Isolation Forest anomaly score in [0,1]
+}
+interface EntropyStats {
+  mean: number;
+  std: number;
+  threshold: number;     // mean + 3σ
+  ifMean: number;
+  ifThreshold: number;   // 95th-percentile cutoff for IF score
+}
 interface Finding   {
   id: number; severity: Severity;
   title: string; description: string; evidence: string[];
@@ -25,6 +39,7 @@ interface AnalysisState {
   preHashes: HashSet | null; postHashes: HashSet | null;
   mbrInfo: MBRInfo | null;
   findings: Finding[]; iocs: IOCEntry[]; entropy: EntropyPt[];
+  entStats: EntropyStats | null;
   riskScore: number; error: string | null;
 }
 
@@ -70,7 +85,7 @@ const IOC_PATTERNS: { type: string; re: RegExp; severity: Severity }[] = [
   { type:'URL',          re:/https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]{4,}/g, severity:'high' },
   { type:'Email',        re:/\b[a-zA-Z0-9._%+-]{2,}@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/g, severity:'medium' },
   { type:'Registry Key', re:/HKEY_(?:LOCAL_MACHINE|CURRENT_USER|CLASSES_ROOT|USERS|CURRENT_CONFIG)\\[^\s"'<>]{3,}/g, severity:'medium' },
-  { type:'Windows Path', re:/[A-Za-z]:\\(?:[^\\\/:*?"<>|\r\n]+\\)*[^\\\/:*?"<>|\r\n]{2,}/g, severity:'info' },
+  { type:'Windows Path', re:/[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\)*[^\\/:*?"<>|\r\n]{2,}/g, severity:'info' },
   { type:'UNC Path',     re:/\\\\[a-zA-Z0-9._-]{2,}\\[a-zA-Z0-9._$-]{2,}/g, severity:'medium' },
   { type:'Linux Path',   re:/\/(?:etc|var|tmp|usr|home|root|bin|sbin|proc)\/[^\s"'<>]{3,}/g, severity:'medium' },
   { type:'MD5 Hash',     re:/\b[0-9a-fA-F]{32}\b/g, severity:'info' },
@@ -112,7 +127,7 @@ strings -a -n 5 evidence.dd > strings.txt
 
 # Hunt for IOCs
 grep -Eo 'https?://[^ "]+' strings.txt       > iocs_urls.txt
-grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' strings.txt > iocs_ips.txt
+grep -Eo '([0-9]{1,3}\\.){3}[0-9]{1,3}' strings.txt > iocs_ips.txt
 grep -Ei 'HKEY_[A-Z_]+\\\\[^ "]+' strings.txt  > iocs_registry.txt
 
 # Scan for malware keyword indicators
@@ -298,6 +313,7 @@ function extractIOCs(strings: string[]): IOCEntry[] {
 function buildFindings(
   mbr: MBRInfo, iocs: IOCEntry[], entropy: EntropyPt[],
   kwHits: {kw:string;count:number}[],
+  entStats: EntropyStats,
 ): { findings: Finding[]; riskScore: number } {
   const findings: Finding[] = [];
   let risk = 0;
@@ -329,29 +345,58 @@ function buildFindings(
     });
   }
 
-  // Entropy (AI anomaly detection)
-  const critEntr = entropy.filter(p => p.entropy > 7.6);
-  const highEntr = entropy.filter(p => p.entropy >= 7.2 && p.entropy <= 7.6);
+  // Entropy (AI anomaly detection — adaptive 3σ baseline per disk)
+  const baselineEvidence = `Baseline μ=${entStats.mean.toFixed(4)}  σ=${entStats.std.toFixed(4)}  →  3σ upper control limit = ${entStats.threshold.toFixed(4)} bits/byte`;
+  const anomalies = entropy.filter(p => p.z >= 3);                // statistical outliers vs this disk
+  const critEntr  = anomalies.filter(p => p.entropy > 7.6);       // absolute band: encryption/ransomware grade
+  const highEntr  = anomalies.filter(p => p.entropy <= 7.6);      // packing/compression grade
   if (critEntr.length > 0) {
     findings.push({ id:id++, severity:'critical',
       title:`Encrypted / Ransomware Data Regions Detected (${critEntr.length} sectors)`,
-      description:`${critEntr.length} sector(s) have Shannon entropy > 7.6 bits/byte — the signature of fully encrypted or ransomware-processed data. Normal plaintext ≈ 4–6 bits/byte; maximum theoretical entropy = 8.0.`,
-      evidence: critEntr.slice(0,6).map(p => `Sector ${p.sectorIdx.toLocaleString()} @ ${p.offsetMB.toFixed(2)} MB  →  ${p.entropy.toFixed(4)} bits/byte`),
+      description:`${critEntr.length} sector(s) are statistical outliers (z ≥ 3) AND exceed 7.6 bits/byte — the signature of fully encrypted or ransomware-processed data. Normal plaintext ≈ 4–6 bits/byte; maximum theoretical entropy = 8.0.`,
+      evidence: [
+        baselineEvidence,
+        ...critEntr.slice(0,5).map(p => `Sector ${p.sectorIdx.toLocaleString()} @ ${p.offsetMB.toFixed(2)} MB  →  ${p.entropy.toFixed(4)} bits/byte  (z=${p.z.toFixed(2)})`),
+      ],
     });
     risk += Math.min(critEntr.length * 5, 45);
   } else if (highEntr.length > 0) {
     findings.push({ id:id++, severity:'high',
       title:`High-Entropy Regions — Possible Packing / Obfuscation (${highEntr.length} sectors)`,
-      description:`${highEntr.length} sector(s) have entropy ≥ 7.2, consistent with compressed data, packed executables, or encrypted payloads.`,
-      evidence: highEntr.slice(0,4).map(p => `Sector ${p.sectorIdx.toLocaleString()} @ ${p.offsetMB.toFixed(2)} MB  →  ${p.entropy.toFixed(4)} bits/byte`),
+      description:`${highEntr.length} sector(s) are statistical outliers (z ≥ 3) for this disk, consistent with compressed data, packed executables, or encrypted payloads.`,
+      evidence: [
+        baselineEvidence,
+        ...highEntr.slice(0,4).map(p => `Sector ${p.sectorIdx.toLocaleString()} @ ${p.offsetMB.toFixed(2)} MB  →  ${p.entropy.toFixed(4)} bits/byte  (z=${p.z.toFixed(2)})`),
+      ],
     });
     risk += Math.min(highEntr.length * 3, 20);
   } else {
     findings.push({ id:id++, severity:'info',
       title:'Entropy Profile: Normal',
-      description:'No anomalously high-entropy sectors detected. Entropy values are consistent with standard file system and user data.',
-      evidence:[`Max sector entropy: ${entropy.length ? Math.max(...entropy.map(p=>p.entropy)).toFixed(4) : 'N/A'} bits/byte`],
+      description:'No statistically anomalous sectors detected against this disk\'s own learned baseline. Entropy values are consistent with standard file system and user data.',
+      evidence:[
+        baselineEvidence,
+        `Max sector entropy: ${entropy.length ? Math.max(...entropy.map(p=>p.entropy)).toFixed(4) : 'N/A'} bits/byte`,
+      ],
     });
+  }
+
+  // AI: Isolation Forest (multivariate unsupervised anomaly detection)
+  const ifAnoms = entropy.filter(p => p.ifScore >= entStats.ifThreshold);
+  if (ifAnoms.length > 0) {
+    const top = [...ifAnoms].sort((a,b) => b.ifScore - a.ifScore).slice(0, 6);
+    // Severity: critical if IF anomalies overlap with the high-entropy bucket, high otherwise.
+    const overlap = ifAnoms.filter(p => p.entropy > 7.2).length;
+    const sev: Severity = overlap >= Math.max(1, Math.floor(ifAnoms.length / 2)) ? 'critical' : 'high';
+    findings.push({ id:id++, severity: sev,
+      title:`AI · Isolation Forest: ${ifAnoms.length} Multivariate Anomalies`,
+      description:`A hand-written Isolation Forest scored each sampled sector over a 4-dimensional feature vector [entropy, mean byte, zero-byte ratio, printable-byte ratio]. ${ifAnoms.length} sector(s) scored at or above the 95th-percentile threshold — they "isolate" faster than typical sectors, marking them as multivariate outliers that warrant inspection.`,
+      evidence: [
+        `Mean IF score = ${entStats.ifMean.toFixed(4)};  95th-percentile cutoff = ${entStats.ifThreshold.toFixed(4)}`,
+        ...top.map(p => `Sector ${p.sectorIdx.toLocaleString()} @ ${p.offsetMB.toFixed(2)} MB  →  IF=${p.ifScore.toFixed(4)}  entropy=${p.entropy.toFixed(3)}`),
+      ],
+    });
+    risk += Math.min(ifAnoms.length * 3, 20);
   }
 
   // Malware keywords
@@ -440,7 +485,7 @@ const DiskForensics: React.FC = () => {
   const [state, setState] = useState<AnalysisState>({
     phase:'idle', progress:0, stepMsg:'',
     preHashes:null, postHashes:null, mbrInfo:null,
-    findings:[], iocs:[], entropy:[], riskScore:0, error:null,
+    findings:[], iocs:[], entropy:[], entStats:null, riskScore:0, error:null,
   });
 
   const patch = useCallback((p: Partial<AnalysisState>) =>
@@ -459,7 +504,7 @@ const DiskForensics: React.FC = () => {
     }
     setFile(f);
     patch({ phase:'idle', error:null, preHashes:null, postHashes:null,
-            findings:[], iocs:[], entropy:[], riskScore:0 });
+            findings:[], iocs:[], entropy:[], entStats:null, riskScore:0 });
   };
 
   const onDragOver  = (e: React.DragEvent) => { e.preventDefault(); setDragging(true); };
@@ -507,30 +552,77 @@ const DiskForensics: React.FC = () => {
       await tick();
       const iocs = extractIOCs(strings);
 
-      patch({ progress:70, stepMsg:'AI: Shannon entropy anomaly detection (sampling sectors)…' });
+      patch({ progress:68, stepMsg:'AI: sampling sectors and computing Shannon entropy…' });
       await tick();
       const SECTOR      = 512;
       const totalSectors = Math.floor(bytes.length / SECTOR);
       const step        = Math.max(1, Math.floor(totalSectors / 500)); // ≤500 sample points
-      const entropy: EntropyPt[] = [];
+      const sampledIdx: number[] = [];
+      const features: number[][] = [];
+      const entropyTmp: { sectorIdx:number; offsetMB:number; entropy:number }[] = [];
       for (let s = 0; s * SECTOR < bytes.length; s += step) {
         const start = s * SECTOR;
         const end   = Math.min(start + SECTOR, bytes.length);
-        entropy.push({ sectorIdx:s, offsetMB:(s*SECTOR)/1048576, entropy:shannonEntropy(bytes.slice(start,end)) });
+        const seg   = bytes.slice(start, end);
+        const e     = shannonEntropy(seg);
+        // 4-feature vector for Isolation Forest: [entropy, mean byte, zero ratio, printable ratio]
+        let sum = 0, zeros = 0, printable = 0;
+        for (let k = 0; k < seg.length; k++) {
+          const b = seg[k];
+          sum += b;
+          if (b === 0) zeros++;
+          if (b >= 32 && b < 127) printable++;
+        }
+        const len = seg.length || 1;
+        features.push([e, sum / len, zeros / len, printable / len]);
+        sampledIdx.push(s);
+        entropyTmp.push({ sectorIdx:s, offsetMB:(s*SECTOR)/1048576, entropy:e });
       }
 
-      patch({ progress:82, stepMsg:'AI: Scanning for malware keyword indicators…' });
+      // Adaptive entropy baseline: learn THIS disk's own μ / σ
+      const eVals = entropyTmp.map(p => p.entropy);
+      const eMean = eVals.reduce((a, b) => a + b, 0) / (eVals.length || 1);
+      const eStd  = Math.sqrt(
+        eVals.reduce((a, b) => a + (b - eMean) ** 2, 0) / (eVals.length || 1),
+      ) || 1e-9;
+      const dynThreshold = eMean + 3 * eStd;   // 3σ upper control limit
+
+      patch({ progress:76, stepMsg:'AI: Isolation Forest — scoring multivariate sector features…' });
+      await tick();
+      // Hand-written Isolation Forest over the 4-feature vectors
+      const ifScores = features.length > 0
+        ? isolationForestScores(features, 100, Math.min(256, features.length))
+        : [];
+      const ifMean = ifScores.length
+        ? ifScores.reduce((a, b) => a + b, 0) / ifScores.length
+        : 0;
+      // Threshold = 95th percentile, with a floor at 0.55 so a uniform disk doesn't false-positive
+      const sortedIf = [...ifScores].sort((a, b) => a - b);
+      const p95 = sortedIf.length ? sortedIf[Math.floor(sortedIf.length * 0.95)] : 0;
+      const ifThreshold = Math.max(p95, 0.55);
+
+      const entropy: EntropyPt[] = entropyTmp.map((p, i) => ({
+        ...p,
+        z: (p.entropy - eMean) / eStd,
+        ifScore: ifScores[i] ?? 0.5,
+      }));
+      const entStats: EntropyStats = {
+        mean: eMean, std: eStd, threshold: dynThreshold,
+        ifMean, ifThreshold,
+      };
+
+      patch({ progress:84, stepMsg:'AI: Scanning for malware keyword indicators…' });
       await tick();
       const lower   = strings.map(s => s.toLowerCase());
       const kwHits  = MALWARE_KEYWORDS
         .map(kw => ({ kw, count:lower.filter(s => s.includes(kw)).length }))
         .filter(k => k.count > 0);
 
-      patch({ progress:88, stepMsg:'Building findings report…' });
+      patch({ progress:90, stepMsg:'Building findings report…' });
       await tick();
-      const { findings, riskScore } = buildFindings(mbrInfo, iocs, entropy, kwHits);
+      const { findings, riskScore } = buildFindings(mbrInfo, iocs, entropy, kwHits, entStats);
 
-      patch({ mbrInfo, iocs, entropy, findings, riskScore, progress:92,
+      patch({ mbrInfo, iocs, entropy, entStats, findings, riskScore, progress:92,
               stepMsg:'Analysis complete. Re-computing hashes for post-analysis verification…' });
       await tick(60);
 
@@ -554,7 +646,7 @@ const DiskForensics: React.FC = () => {
     }
   }, [file, patch]);
 
-  const { phase, progress, stepMsg, preHashes, postHashes, mbrInfo, findings, iocs, entropy, riskScore, error } = state;
+  const { phase, progress, stepMsg, preHashes, postHashes, mbrInfo, findings, iocs, entropy, entStats, riskScore, error } = state;
 
   const hashMatch = preHashes && postHashes &&
     preHashes.md5 === postHashes.md5 &&
@@ -574,7 +666,7 @@ const DiskForensics: React.FC = () => {
   return (
     <div className="df-page">
       <div className="df-header">
-        <span className="df-badge">Feature #2 · Anomaly Detection</span>
+        <span className="df-badge">AI Capability #2 · Metadata Analysis (Anomaly Detection)</span>
         <h1>Disk Image <span className="df-hi">Forensics</span></h1>
         <p>Chain-of-custody hashing · Binary parsing · AI-powered entropy anomaly detection · IOC extraction</p>
       </div>
@@ -776,32 +868,75 @@ const DiskForensics: React.FC = () => {
               {activeTab === 'entropy' && (
                 <div className="df-ent-wrap">
                   <div className="df-ent-legend">
-                    <span className="df-leg df-leg--normal">■ Normal (&lt;7.2 bits/byte)</span>
-                    <span className="df-leg df-leg--high">■ High (7.2–7.6)</span>
-                    <span className="df-leg df-leg--crit">■ Critical (&gt;7.6)</span>
+                    <span className="df-leg df-leg--normal">■ Normal (z &lt; 3)</span>
+                    <span className="df-leg df-leg--high">■ Anomaly (z ≥ 3, ≤ 7.6 bits/byte)</span>
+                    <span className="df-leg df-leg--crit">■ Anomaly (z ≥ 3, &gt; 7.6 bits/byte)</span>
                   </div>
                   <div className="df-ent-ai-note">
-                    <strong>AI Technique — Shannon Entropy Anomaly Detection:</strong> Each bar is a sampled 512-byte sector.
-                    The model flags sectors exceeding the statistical anomaly threshold (7.2 bits/byte).
-                    Fully encrypted or ransomware-processed data approaches the theoretical maximum of 8.0 bits/byte.
+                    <strong>AI Technique — Adaptive Entropy Anomaly Detection:</strong> Each bar is a
+                    sampled 512-byte sector. Rather than a hard-coded cut-off, the tool learns this
+                    disk's own entropy distribution (mean μ, standard deviation σ) and flags any sector
+                    that lies at or beyond a 3σ upper control limit (z ≥ 3). Absolute entropy bands
+                    then label the likely cause: &gt; 7.6 bits/byte = encryption/ransomware grade;
+                    7.2–7.6 = packing/compression. Maximum theoretical entropy = 8.0.
+                    {entStats && (
+                      <>
+                        {' '}
+                        <strong>Learned baseline:</strong> μ = {entStats.mean.toFixed(4)},
+                        σ = {entStats.std.toFixed(4)}, 3σ threshold = {entStats.threshold.toFixed(4)} bits/byte.
+                      </>
+                    )}
                   </div>
                   <div className="df-ent-chart">
                     {entropy.map((p,i) => {
-                      const cls = p.entropy > 7.6 ? 'df-eb--crit' : p.entropy > 7.2 ? 'df-eb--high' : 'df-eb--norm';
+                      const isAnom = p.z >= 3;
+                      const cls = isAnom && p.entropy > 7.6
+                        ? 'df-eb--crit'
+                        : isAnom ? 'df-eb--high' : 'df-eb--norm';
                       return (
                         <div key={i} className={`df-ent-bar ${cls}`}
                           style={{height:`${(p.entropy/maxE)*100}%`}}
-                          title={`Sector ${p.sectorIdx} @ ${p.offsetMB.toFixed(2)} MB: ${p.entropy.toFixed(4)} bits/byte`}
+                          title={`Sector ${p.sectorIdx} @ ${p.offsetMB.toFixed(2)} MB\n${p.entropy.toFixed(4)} bits/byte  (z=${p.z.toFixed(2)})\nIsolation Forest score: ${p.ifScore.toFixed(4)}`}
                         />
                       );
                     })}
                   </div>
                   <div className="df-ent-stats">
                     <span>Average: {(entropy.reduce((s,p)=>s+p.entropy,0)/(entropy.length||1)).toFixed(3)} bits/byte</span>
-                    <span>Maximum: {Math.max(...entropy.map(p=>p.entropy)).toFixed(3)}</span>
-                    <span>Anomalous sectors: {entropy.filter(p=>p.entropy>7.2).length} of {entropy.length} sampled</span>
-                    <span>Threshold: 7.200 bits/byte</span>
+                    <span>Maximum: {entropy.length ? Math.max(...entropy.map(p=>p.entropy)).toFixed(3) : 'N/A'}</span>
+                    <span>3σ anomalies: {entropy.filter(p => p.z >= 3).length} of {entropy.length} sampled</span>
+                    {entStats && <span>Threshold: {entStats.threshold.toFixed(3)} bits/byte (learned)</span>}
                   </div>
+
+                  {entStats && entropy.length > 0 && (
+                    <>
+                      <div className="df-ent-ai-note" style={{marginTop: '1.25rem'}}>
+                        <strong>AI Technique #2 — Isolation Forest:</strong> a from-scratch
+                        implementation of Liu, Ting &amp; Zhou's algorithm scores each sampled sector
+                        over a 4-dimensional feature vector
+                        [entropy, mean byte, zero-byte ratio, printable-byte ratio]. Bars at or above
+                        the 95th-percentile cutoff (red) are multivariate anomalies that "isolate"
+                        faster than typical sectors. <strong>Mean IF score</strong> = {entStats.ifMean.toFixed(4)};
+                        <strong> threshold</strong> = {entStats.ifThreshold.toFixed(4)}.
+                      </div>
+                      <div className="df-ent-chart">
+                        {entropy.map((p,i) => {
+                          const cls = p.ifScore >= entStats.ifThreshold ? 'df-eb--crit' : 'df-eb--norm';
+                          return (
+                            <div key={i} className={`df-ent-bar ${cls}`}
+                              style={{height:`${Math.max(2, p.ifScore * 100)}%`}}
+                              title={`Sector ${p.sectorIdx} @ ${p.offsetMB.toFixed(2)} MB\nIF score: ${p.ifScore.toFixed(4)}\nentropy: ${p.entropy.toFixed(4)} bits/byte`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="df-ent-stats">
+                        <span>IF score range: {Math.min(...entropy.map(p=>p.ifScore)).toFixed(3)} – {Math.max(...entropy.map(p=>p.ifScore)).toFixed(3)}</span>
+                        <span>Multivariate anomalies: {entropy.filter(p => p.ifScore >= entStats.ifThreshold).length} of {entropy.length}</span>
+                        <span>Trees: 100 · Sub-sample: 256 · Features: 4</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
