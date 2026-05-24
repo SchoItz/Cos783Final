@@ -13,7 +13,7 @@ script. Total runtime is **5:00 — that's the hard cap, no speeding up allowed.
 | Member | What you built | What you cover in the video |
 |---|---|---|
 | **Hendré Beyer** (u26846188) | App layer — React UI, routing, drag-and-drop pipeline, results visualisation, the Python demo-image generator | Opens, walks the dev environment + UI, closes |
-| **François Scholtz** (u1924232) | Forensic-acquisition layer — chain-of-custody hashing (incl. the from-scratch MD5), MBR parser, partition table, FS signature detection | Phase 1 and Phase 2 |
+| **François Scholtz** (u19024232) | Forensic-acquisition layer — chain-of-custody hashing (incl. the from-scratch MD5), MBR parser, partition table, FS signature detection | Phase 1 and Phase 2 |
 | **Galen Myburgh** (u21504645) | AI layer — adaptive entropy baseline, Isolation Forest, IOC and keyword scanners, risk scoring | Phase 3 (the AI bit) |
 
 ---
@@ -50,7 +50,7 @@ Tick these off first.
 **HENDRÉ:**
 
 > "Hi, we're team ForensicAI. I'm **Hendré Beyer**, student number **u26846188**.
-> With me are **François Scholtz**, **u1924232**, and **Galen Myburgh**, **u21504645**.
+> With me are **François Scholtz**, **u19024232**, and **Galen Myburgh**, **u21504645**.
 >
 > For the final assignment we chose AI capability number two — **Metadata Analysis**.
 > What we built is a browser-based disk-forensics triage tool that runs two
@@ -304,7 +304,7 @@ Every line on the rubric has to show up somewhere on tape. Use this to verify.
 
 ## One-liner for the video description box
 
-> "ForensicAI — a browser-based digital-forensics triage tool for COS783, demonstrating AI capability #2 (Metadata Analysis). Two from-scratch unsupervised anomaly-detection models — an adaptive 3σ entropy baseline and a hand-written Isolation Forest — applied to disk-image sectors, alongside chain-of-custody hashing, MBR parsing, and IOC extraction. Built by François Scholtz (u1924232), Galen Myburgh (u21504645), and Hendré Beyer (u26846188)."
+> "ForensicAI — a browser-based digital-forensics triage tool for COS783, demonstrating AI capability #2 (Metadata Analysis). Two from-scratch unsupervised anomaly-detection models — an adaptive 3σ entropy baseline and a hand-written Isolation Forest — applied to disk-image sectors, alongside chain-of-custody hashing, MBR parsing, and IOC extraction. Built by François Scholtz (u19024232), Galen Myburgh (u21504645), and Hendré Beyer (u26846188)."
 
 ---
 

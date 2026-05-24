@@ -88,7 +88,7 @@ const About: React.FC = () => {
           <h2>Who did what</h2>
           <ul className="feature-list">
             <li>
-              <strong>Fran&ccedil;ois Scholtz &mdash; u1924232</strong>
+              <strong>Fran&ccedil;ois Scholtz &mdash; u19024232</strong>
               <br />
               <em>Acquisition and disk-structure engine.</em> The chain-of-custody hashing
               pipeline (including the from-scratch MD5), the MBR boot-signature validation,

@@ -88,6 +88,6 @@ code (forensic logic, AI logic, UI, routing, styles) is our own.
 
 ## Team
 
-- François Scholtz — **u1924232**
+- François Scholtz — **u19024232**
 - Galen Myburgh — **u21504645**
 - Hendré Beyer — **u26846188**
