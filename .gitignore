@@ -21,8 +21,3 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# generated demo disk images (script is committed; outputs are not)
-*.dd
-*.img
-*.raw

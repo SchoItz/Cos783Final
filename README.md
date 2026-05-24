@@ -36,13 +36,16 @@ CI=true npm run build
 ## Demo data
 
 A reproducible 8 MB demo image with a valid MBR, an NTFS signature, a high-entropy
-"encrypted" region, malware-keyword strings, and IOCs:
+"encrypted" region, malware-keyword strings, and IOCs is **committed to the repo as
+`sample_evidence.dd`** so you can drag it straight into the app without any setup.
+
+To regenerate it (the high-entropy region uses fresh randomness on each run, so the
+file's hash will change — the chain-of-custody check inside the app still confirms
+pre/post-analysis MATCH):
 
 ```bash
-python make_demo_image.py    # creates sample_evidence.dd → drag into the app
+python make_demo_image.py    # overwrites sample_evidence.dd
 ```
-
-`*.dd` images are git-ignored; the generator script is committed for reproducibility.
 
 ## Features
 
