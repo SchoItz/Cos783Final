@@ -28,6 +28,8 @@ interface EntropyStats {
   threshold: number;     // mean + 3σ
   ifMean: number;
   ifThreshold: number;   // 95th-percentile cutoff for IF score
+  coverage: string;      // human-readable "every sector" / "every Nth sector"
+  totalSectors: number;
 }
 interface Finding   {
   id: number; severity: Severity;
@@ -390,7 +392,7 @@ function buildFindings(
     const sev: Severity = overlap >= Math.max(1, Math.floor(ifAnoms.length / 2)) ? 'critical' : 'high';
     findings.push({ id:id++, severity: sev,
       title:`AI · Isolation Forest: ${ifAnoms.length} Multivariate Anomalies`,
-      description:`A hand-written Isolation Forest scored each sampled sector over a 4-dimensional feature vector [entropy, mean byte, zero-byte ratio, printable-byte ratio]. ${ifAnoms.length} sector(s) scored at or above the 95th-percentile threshold — they "isolate" faster than typical sectors, marking them as multivariate outliers that warrant inspection.`,
+      description:`A hand-written Isolation Forest scored each sampled sector over a 7-dimensional feature vector [entropy, mean byte, zero-byte ratio, printable-byte ratio, longest zero run, distinct byte ratio, byte-pair (bigram) entropy]. ${ifAnoms.length} sector(s) scored at or above the 95th-percentile threshold — they "isolate" faster than typical sectors, marking them as multivariate outliers that warrant inspection.`,
       evidence: [
         `Mean IF score = ${entStats.ifMean.toFixed(4)};  95th-percentile cutoff = ${entStats.ifThreshold.toFixed(4)}`,
         ...top.map(p => `Sector ${p.sectorIdx.toLocaleString()} @ ${p.offsetMB.toFixed(2)} MB  →  IF=${p.ifScore.toFixed(4)}  entropy=${p.entropy.toFixed(3)}`),
@@ -552,30 +554,69 @@ const DiskForensics: React.FC = () => {
       await tick();
       const iocs = extractIOCs(strings);
 
-      patch({ progress:68, stepMsg:'AI: sampling sectors and computing Shannon entropy…' });
+      patch({ progress:68, stepMsg:'Computing Shannon entropy and per-sector feature vectors…' });
       await tick();
-      const SECTOR      = 512;
-      const totalSectors = Math.floor(bytes.length / SECTOR);
-      const step        = Math.max(1, Math.floor(totalSectors / 500)); // ≤500 sample points
-      const sampledIdx: number[] = [];
+      const SECTOR        = 512;
+      const totalSectors  = Math.floor(bytes.length / SECTOR);
+      // Full-scan when feasible; cap at 10 000 samples so the IF stays interactive.
+      const MAX_SAMPLES   = 10000;
+      const step          = Math.max(1, Math.ceil(totalSectors / MAX_SAMPLES));
+      const fullScan      = step === 1;
       const features: number[][] = [];
       const entropyTmp: { sectorIdx:number; offsetMB:number; entropy:number }[] = [];
+
       for (let s = 0; s * SECTOR < bytes.length; s += step) {
         const start = s * SECTOR;
         const end   = Math.min(start + SECTOR, bytes.length);
         const seg   = bytes.slice(start, end);
+        const len   = seg.length || 1;
         const e     = shannonEntropy(seg);
-        // 4-feature vector for Isolation Forest: [entropy, mean byte, zero ratio, printable ratio]
+
+        // Per-sector aggregates in a single pass over the segment.
         let sum = 0, zeros = 0, printable = 0;
+        let curZeroRun = 0, longestZeroRun = 0;
+        const distinct = new Uint8Array(256);
         for (let k = 0; k < seg.length; k++) {
           const b = seg[k];
           sum += b;
-          if (b === 0) zeros++;
+          distinct[b] = 1;
+          if (b === 0) { zeros++; curZeroRun++; if (curZeroRun > longestZeroRun) longestZeroRun = curZeroRun; }
+          else { curZeroRun = 0; }
           if (b >= 32 && b < 127) printable++;
         }
-        const len = seg.length || 1;
-        features.push([e, sum / len, zeros / len, printable / len]);
-        sampledIdx.push(s);
+        let distinctCount = 0;
+        for (let k = 0; k < 256; k++) if (distinct[k]) distinctCount++;
+
+        // Bigram (byte-pair) entropy — catches structure that single-byte entropy hides
+        // (e.g. some packers produce high byte entropy but low bigram entropy).
+        let bigramEntropy = 0;
+        if (seg.length >= 2) {
+          const pairs = new Map<number, number>();
+          for (let k = 0; k < seg.length - 1; k++) {
+            const key = (seg[k] << 8) | seg[k + 1];
+            pairs.set(key, (pairs.get(key) ?? 0) + 1);
+          }
+          const total = seg.length - 1;
+          for (const c of pairs.values()) {
+            const p = c / total;
+            bigramEntropy -= p * Math.log2(p);
+          }
+          // normalise into [0, 1] using the cap log2(total), then scale by 16 (max for 2-byte alphabet)
+          bigramEntropy = bigramEntropy / 16;
+        }
+
+        // 7-feature vector for the Isolation Forest:
+        //   [ entropy, mean byte, zero ratio, printable ratio,
+        //     longest zero run (normalised), distinct byte ratio, bigram entropy (normalised) ]
+        features.push([
+          e,
+          sum / len,
+          zeros / len,
+          printable / len,
+          longestZeroRun / len,
+          distinctCount / 256,
+          bigramEntropy,
+        ]);
         entropyTmp.push({ sectorIdx:s, offsetMB:(s*SECTOR)/1048576, entropy:e });
       }
 
@@ -606,9 +647,13 @@ const DiskForensics: React.FC = () => {
         z: (p.entropy - eMean) / eStd,
         ifScore: ifScores[i] ?? 0.5,
       }));
+      const coverage = fullScan
+        ? `every sector (full scan of ${totalSectors.toLocaleString()} sectors)`
+        : `every ${step.toLocaleString()}th sector (${entropy.length.toLocaleString()} of ${totalSectors.toLocaleString()} sectors)`;
       const entStats: EntropyStats = {
         mean: eMean, std: eStd, threshold: dynThreshold,
         ifMean, ifThreshold,
+        coverage, totalSectors,
       };
 
       patch({ progress:84, stepMsg:'AI: Scanning for malware keyword indicators…' });
@@ -874,7 +919,7 @@ const DiskForensics: React.FC = () => {
                   </div>
                   <div className="df-ent-ai-note">
                     <strong>AI Technique — Adaptive Entropy Anomaly Detection:</strong> Each bar is a
-                    sampled 512-byte sector. Rather than a hard-coded cut-off, the tool learns this
+                    512-byte sector. Rather than a hard-coded cut-off, the tool learns this
                     disk's own entropy distribution (mean μ, standard deviation σ) and flags any sector
                     that lies at or beyond a 3σ upper control limit (z ≥ 3). Absolute entropy bands
                     then label the likely cause: &gt; 7.6 bits/byte = encryption/ransomware grade;
@@ -904,18 +949,20 @@ const DiskForensics: React.FC = () => {
                   <div className="df-ent-stats">
                     <span>Average: {(entropy.reduce((s,p)=>s+p.entropy,0)/(entropy.length||1)).toFixed(3)} bits/byte</span>
                     <span>Maximum: {entropy.length ? Math.max(...entropy.map(p=>p.entropy)).toFixed(3) : 'N/A'}</span>
-                    <span>3σ anomalies: {entropy.filter(p => p.z >= 3).length} of {entropy.length} sampled</span>
+                    <span>3σ anomalies: {entropy.filter(p => p.z >= 3).length} of {entropy.length}</span>
                     {entStats && <span>Threshold: {entStats.threshold.toFixed(3)} bits/byte (learned)</span>}
+                    {entStats && <span>Coverage: {entStats.coverage}</span>}
                   </div>
 
                   {entStats && entropy.length > 0 && (
                     <>
                       <div className="df-ent-ai-note" style={{marginTop: '1.25rem'}}>
                         <strong>AI Technique #2 — Isolation Forest:</strong> a from-scratch
-                        implementation of Liu, Ting &amp; Zhou's algorithm scores each sampled sector
-                        over a 4-dimensional feature vector
-                        [entropy, mean byte, zero-byte ratio, printable-byte ratio]. Bars at or above
-                        the 95th-percentile cutoff (red) are multivariate anomalies that "isolate"
+                        implementation of Liu, Ting &amp; Zhou's algorithm scores each sector
+                        over a <strong>7-dimensional</strong> feature vector
+                        [entropy, mean byte, zero-byte ratio, printable-byte ratio, longest zero
+                        run, distinct-byte ratio, bigram entropy]. Bars at or above the
+                        95th-percentile cutoff (red) are multivariate anomalies that "isolate"
                         faster than typical sectors. <strong>Mean IF score</strong> = {entStats.ifMean.toFixed(4)};
                         <strong> threshold</strong> = {entStats.ifThreshold.toFixed(4)}.
                       </div>
@@ -933,7 +980,7 @@ const DiskForensics: React.FC = () => {
                       <div className="df-ent-stats">
                         <span>IF score range: {Math.min(...entropy.map(p=>p.ifScore)).toFixed(3)} – {Math.max(...entropy.map(p=>p.ifScore)).toFixed(3)}</span>
                         <span>Multivariate anomalies: {entropy.filter(p => p.ifScore >= entStats.ifThreshold).length} of {entropy.length}</span>
-                        <span>Trees: 100 · Sub-sample: 256 · Features: 4</span>
+                        <span>Trees: 100 · Sub-sample: 256 · Features: 7</span>
                       </div>
                     </>
                   )}

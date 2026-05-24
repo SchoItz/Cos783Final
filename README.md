@@ -13,10 +13,12 @@ producing a severity-coded, risk-scored findings report and a post-analysis inte
    deviation σ) and flags sampled sectors whose entropy exceeds a 3σ upper control limit (z-score ≥ 3).
    Absolute entropy bands then label the likely cause: encryption/ransomware (> 7.6 bits/byte) vs.
    packing/compression (7.2–7.6).
-2. **Isolation Forest.** A from-scratch implementation of Liu, Ting & Zhou's algorithm scores each sampled
-   sector over a feature vector `[entropy, mean byte value, zero-byte ratio, printable-byte ratio]`.
-   Sectors that isolate quickly in random trees receive a high anomaly score; the top percentile is
-   surfaced as a multivariate ML finding.
+2. **Isolation Forest.** A from-scratch implementation of Liu, Ting & Zhou's algorithm scores each
+   sector over a **7-dimensional feature vector** `[entropy, mean byte value, zero-byte ratio,
+   printable-byte ratio, longest zero run, distinct-byte ratio, byte-pair (bigram) entropy]`.
+   Sectors that isolate quickly in random trees receive a high anomaly score; the top percentile
+   is surfaced as a multivariate ML finding. The disk is full-scanned where feasible (capped at
+   10 000 sectors so the model stays interactive).
 
 ## Run
 

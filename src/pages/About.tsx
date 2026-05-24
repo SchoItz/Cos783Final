@@ -47,11 +47,13 @@ const About: React.FC = () => {
             </li>
             <li>
               <strong>Isolation Forest.</strong> A from-scratch implementation of Liu, Ting &amp; Zhou&rsquo;s
-              algorithm scores each sampled sector over a feature vector
-              [entropy, mean byte value, zero-byte ratio, printable-byte ratio]. Sectors that
-              isolate quickly in random trees receive a high anomaly score; the top percentile
-              is surfaced as a multivariate ML finding that does not rely on absolute entropy
-              thresholds alone.
+              algorithm scores each sector over a 7-dimensional feature vector
+              [entropy, mean byte value, zero-byte ratio, printable-byte ratio, longest zero
+              run, distinct-byte ratio, byte-pair (bigram) entropy]. Sectors that isolate
+              quickly in random trees receive a high anomaly score; the top percentile is
+              surfaced as a multivariate ML finding that does not rely on absolute entropy
+              thresholds alone. The tool full-scans the disk where feasible (capped at 10 000
+              sectors so the model stays interactive).
             </li>
           </ul>
         </div>
@@ -104,9 +106,9 @@ const About: React.FC = () => {
           <ul className="feature-list">
             <li>Analysis is single-pass over a sampled sector subset; full-image scanning would
                 improve recall at the cost of in-browser memory.</li>
-            <li>The Isolation Forest currently uses four hand-engineered features; richer
-                features (n-gram byte distributions, sector-locality correlation) would sharpen
-                detection of partially encrypted or obfuscated regions.</li>
+            <li>The Isolation Forest currently uses seven hand-engineered features; sector-locality
+                correlation (cross-sector context windows) and higher-order n-gram features would
+                sharpen detection of partially encrypted or obfuscated regions.</li>
             <li>Findings are presented in-app; a signed, exportable PDF/JSON report would
                 strengthen evidentiary use.</li>
             <li>No file-carving or deleted-file recovery; integrating a JavaScript port of
