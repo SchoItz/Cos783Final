@@ -43,39 +43,34 @@ Tick these off first.
 
 ---
 
-### 0:00 – 0:30 · Opening (30s) — HENDRÉ
+### 0:00 – 0:25 · Opening (25s) — HENDRÉ
 
 *Browser is on the Home page.*
 
 **HENDRÉ:**
 
-> "Hi, we're team ForensicAI. I'm **Hendré Beyer**, student number **u26846188**.
-> With me are **François Scholtz**, **u19024232**, and **Galen Myburgh**, **u21504645**.
->
-> For the final assignment we chose AI capability number two — **Metadata Analysis**.
-> What we built is a browser-based disk-forensics triage tool that runs two
-> unsupervised anomaly-detection models over the bytes of a disk image. The whole
-> thing is in TypeScript and React, and the AI is a from-scratch Isolation Forest.
-> Let me show you."
+> "Hi, we're team ForensicAI — I'm **Hendré Beyer**, **u26846188**, with
+> **François Scholtz**, **u19024232**, and **Galen Myburgh**, **u21504645**.
+> For the final assignment we chose AI capability number two — Metadata
+> Analysis. We built a browser-based disk-forensics tool that runs two
+> unsupervised anomaly-detection models over a disk image — all in TypeScript
+> and React, with a from-scratch Isolation Forest. Let me show you."
 
 *Click **Open the analyser** to navigate to `/forensics`.*
 
 ---
 
-### 0:30 – 1:15 · Dev environment and demo data (45s) — HENDRÉ
+### 0:25 – 1:00 · Dev environment and demo data (35s) — HENDRÉ
 
 *Alt-tab to VS Code briefly so the editor is on screen.*
 
 **HENDRÉ:**
 
-> "Here's our dev environment — VS Code, React 19, TypeScript, Git on a feature
-> branch. Everything forensic and AI in this codebase is our own work: the MD5
-> implementation, the MBR parser, the entropy engine, the Isolation Forest. The
-> only runtime libraries we use are React itself, React Router, and the browser's
-> built-in Web Crypto API for SHA-1 and SHA-256.
->
-> My part of the team was the React app, the analysis pipeline UI, the results
-> visualisation, and the Python script I'm about to run."
+> "This is our dev environment — VS Code, React 19, TypeScript, Git.
+> Everything forensic and AI here is our own: the MD5, the MBR parser, the
+> entropy engine, the Isolation Forest. The only libraries are React, React
+> Router, and the browser's Web Crypto API. My part was the app, the UI, and
+> this Python generator."
 
 *Click into the terminal pane and run:*
 
@@ -87,156 +82,103 @@ python3 make_demo_image.py
 
 **HENDRÉ:**
 
-> "That script writes an 8 MB raw disk image with a valid MBR, an NTFS partition,
-> a 2 MB high-entropy region, and a handful of embedded malware indicators — so
-> we've got something realistic to drop into the tool."
+> "That writes an 8 MB disk image with a valid MBR, an NTFS partition, a
+> high-entropy region, and some embedded malware indicators."
 
 *Alt-tab back to the browser. Drag `sample_evidence.dd` onto the drop zone. Click **▶ Run Forensic Analysis**.*
 
 **HENDRÉ:**
 
-> "I drop the evidence in, start the pipeline, and while it runs I'll hand over
-> to François."
+> "I drop it in, start the pipeline, and hand over to François."
 
 ---
 
-### 1:15 – 2:15 · Phase 1 + Phase 2 (60s) — FRANÇOIS
+### 1:00 – 1:45 · Phase 1 + Phase 2 (45s) — FRANÇOIS
 
 *Scroll to the Phase 1 panel as the hashes appear.*
 
 **FRANÇOIS:**
 
-> "Thanks, Hendré. I'm **François**. I built the acquisition side of the tool.
->
-> **Phase 1** is where we set up the chain of custody. Before we touch anything
-> on the disk image, we hash it three different ways — MD5, SHA-1, and SHA-256
-> — and record a UTC timestamp. The MD5 you see on screen is my own
-> implementation of the RFC 1321 algorithm, written by hand, not a library
-> call. SHA-1 and SHA-256 use the browser's Web Crypto API."
+> "Thanks. I'm **François** — I built the acquisition side. **Phase 1** is chain
+> of custody: before we touch anything, we hash the image three ways — MD5,
+> SHA-1, SHA-256. The MD5 is my own RFC 1321 implementation, not a library."
 
-*Point at the three hash rows and the timestamp.*
-
-*Scroll down to the Phase 2 panel.*
+*Point at the hash rows, then scroll to the Phase 2 panel.*
 
 **FRANÇOIS:**
 
-> "**Phase 2** parses the disk's binary layout. We check the boot signature at
-> bytes 510 and 511 — `0x55AA` confirms it's a valid MBR. We pull the disk
-> signature from bytes 440 to 443, sniff the volume boot record for known
-> file-system magic bytes — here we see NTFS — and parse all four partition
-> entries from bytes 446 to 510.
->
-> The row on screen shows one bootable NTFS partition starting at LBA 2048.
-> Every byte offset there I read straight off the MBR specification — no
-> third-party parser, no shortcuts. Over to Galen for the AI side."
+> "**Phase 2** parses the binary layout. The `0x55AA` signature at bytes 510 and
+> 511 confirms a valid MBR. We read the disk signature, detect the file system
+> — NTFS here — and parse all four partition entries by hand. One bootable NTFS
+> partition at LBA 2048. Over to Galen."
 
 ---
 
-### 2:15 – 3:45 · Phase 3, the AI (90s) — GALEN
+### 1:45 – 2:55 · Phase 3, the AI (70s) — GALEN
 
 *Click the **Entropy** tab.*
 
 **GALEN:**
 
-> "Thanks, François. I'm **Galen**. I built the AI side of the tool, which is
-> two complementary unsupervised models. Neither one uses training data, and
-> both are fitted from scratch on every disk you drop in.
->
-> **Model one — adaptive entropy baseline.** The trick is that we don't use a
-> fixed entropy threshold. Instead, the tool works out the mean and standard
-> deviation of Shannon entropy across this particular disk, and flags any
-> sector that sits three or more standard deviations above that mean. That's
-> classical statistical anomaly detection — a Shewhart-style control chart
-> applied to information entropy. You can see the baseline the model learned
-> right there on screen — mu, sigma, and the 3-sigma cutoff, all derived from
-> the data, not hard-coded."
+> "Thanks. I'm **Galen** — I built the AI: two unsupervised models, no training
+> data, both fitted per disk. First, the **adaptive entropy baseline**. Instead
+> of a fixed threshold, we compute this disk's own mean and standard deviation
+> of Shannon entropy, and flag any sector three sigma above the mean — a
+> control-chart approach. You can see the learned mu, sigma, and cutoff on
+> screen."
 
-*Point at the learned μ / σ / threshold values, then sweep across the red bars in the entropy chart.*
+*Point at the learned μ / σ / cutoff, then sweep across the red bars.*
 
 **GALEN:**
 
-> "**Model two — our Isolation Forest.** This is a from-scratch implementation of
-> the Liu, Ting and Zhou algorithm from 2008. For every sector we build a
-> seven-feature vector: entropy, mean byte value, zero-byte ratio,
-> printable-byte ratio, longest zero run, distinct-byte ratio, and byte-pair
-> entropy. Then we grow a hundred random binary trees over those features. The
-> sectors that 'isolate' fastest get the highest anomaly score, and we flag
-> the top five percent."
+> "Second, our **Isolation Forest** — the Liu, Ting and Zhou algorithm, from
+> scratch. Each sector becomes a seven-feature vector, and a hundred random
+> trees score how fast it isolates. We flag the top five percent. Notice both
+> models independently flag the same 3-to-5-megabyte region — that's the
+> encrypted chunk, found two different ways."
 
-*Scroll to the Isolation Forest chart. Hover one of the red bars to show the tooltip.*
+*Alt-tab to VS Code, click the `src/ai/isolationForest.ts` tab for two seconds.*
 
 **GALEN:**
 
-> "What you see here is that both models — completely independent of each other
-> — flag the same region between 3 and 5 megabytes. That's the encrypted
-> chunk Hendré's generator embedded. Two independent unsupervised methods
-> agreeing on the same anomaly — that's cross-validation."
-
-*Alt-tab to VS Code, click the `src/ai/isolationForest.ts` tab so the source is visible for two seconds.*
-
-**GALEN:**
-
-> "This is the Isolation Forest source — about 90 lines of TypeScript, no ML
-> dependency. Back to Hendré."
+> "That's the Isolation Forest — ninety lines of TypeScript, no ML library.
+> Back to Hendré."
 
 *Alt-tab back to the browser.*
 
 ---
 
-### 3:45 – 4:30 · Findings, IOCs, integrity (45s) — HENDRÉ
+### 2:55 – 3:30 · Findings, IOCs, integrity (35s) — HENDRÉ
 
-*Click the **Findings** tab. Scroll so the IF finding, the entropy finding, and the malware-keyword finding are visible.*
-
-**HENDRÉ:**
-
-> "Everything ends up in this findings panel. You can see the Isolation Forest
-> result, the entropy anomaly, the malware-keyword hits — `mimikatz`,
-> `powershell -enc` — and the IOCs that our regex extractor pulled out of
-> the raw strings on the disk."
-
-*Click the **IOCs** tab briefly. Scroll once.*
+*Click the **Findings** tab, then briefly the **IOCs** tab.*
 
 **HENDRÉ:**
 
-> "Here are the IOCs themselves — public IPs, a command-and-control URL, a
-> Windows registry-run key, Linux paths. The risk score at the top of the page
-> — currently **critical** — is computed from the weighted severity of every
-> finding."
+> "Everything lands in the findings panel — the Isolation Forest result, the
+> entropy anomaly, malware keywords like `mimikatz`, and the IOCs our regex
+> pulled from the strings: public IPs, a C2 URL, a registry key. The risk score
+> up top is critical."
 
 *Scroll down to the Phase 4 panel.*
 
 **HENDRÉ:**
 
-> "And **Phase 4** is the integrity check. We re-hash the evidence after
-> everything is done. All three hashes match — chain of custody preserved.
-> The disk image was not modified at any point during the analysis."
+> "And **Phase 4** re-hashes the image — all three match, so the chain of
+> custody held and nothing was modified."
 
 ---
 
-### 4:30 – 5:00 · Close — ALL THREE (30s)
+### 3:30 – 3:50 · Close — ALL THREE (20s)
 
-*Scroll back up so the red **CRITICAL** risk banner is on screen for the close.*
+*Scroll back up so the red **CRITICAL** risk banner is on screen.*
 
-**HENDRÉ:**
+**HENDRÉ:** > "So — capability number two, two unsupervised ML models, in a full chain-of-custody workflow."
 
-> "To wrap up — we built AI capability number two with two real unsupervised
-> machine-learning models, fitted on every disk, wrapped in a full
-> chain-of-custody forensic workflow."
+**FRANÇOIS:** > "Hand-written hashing and parsing, no forensic libraries."
 
-**FRANÇOIS:**
+**GALEN:** > "And a from-scratch Isolation Forest, seven features per sector."
 
-> "All the cryptographic hashing and binary parsing is hand-written, no
-> third-party forensic libraries."
-
-**GALEN:**
-
-> "And the Isolation Forest is from scratch, seven features per sector — a
-> proper unsupervised anomaly detector for disk metadata."
-
-**HENDRÉ:**
-
-> "Thanks for watching. Our names and student numbers are in the video
-> description."
+**HENDRÉ:** > "Thanks for watching — our names and numbers are in the description."
 
 *Hold the closing frame for two seconds, then stop the recording.*
 
@@ -246,18 +188,19 @@ python3 make_demo_image.py
 
 | Segment | Speaker | Time | Cumulative |
 |---|---|---|---|
-| Opening | Hendré | 0:30 | 0:30 |
-| Dev environment + demo image | Hendré | 0:45 | 1:15 |
-| Phase 1 + Phase 2 | François | 1:00 | 2:15 |
-| Phase 3 (AI) | Galen | 1:30 | 3:45 |
-| Findings, IOCs, integrity | Hendré | 0:45 | 4:30 |
-| Three-way close | All | 0:30 | 5:00 |
+| Opening | Hendré | 0:25 | 0:25 |
+| Dev environment + demo image | Hendré | 0:35 | 1:00 |
+| Phase 1 + Phase 2 | François | 0:45 | 1:45 |
+| Phase 3 (AI) | Galen | 1:10 | 2:55 |
+| Findings, IOCs, integrity | Hendré | 0:35 | 3:30 |
+| Three-way close | All | 0:20 | 3:50 |
 
-Speaking time per person: Hendré 2:30, François 1:00, Galen 1:30. Hendré's
-share is bigger because the opener, the closer, and the UI walkthroughs are
-naturally his territory as the front-end lead. If we want a more even split,
-shave 10 seconds off "Findings, IOCs, integrity" and let François open
-Phase 3.
+Target is **~3:50 of talking**, which lands around 4:00–4:15 at a relaxed pace
+and leaves roughly a minute of buffer under the 5:00 cap. So if anyone slows
+down, pauses, or the analysis takes a moment, you're still safe. Speaking time
+per person: Hendré ~1:55, François ~0:45, Galen ~1:10. If you want François to
+have a bit more, let him open Phase 3 with one sentence on why anomaly
+detection matters for triage.
 
 ---
 
@@ -265,14 +208,14 @@ Phase 3.
 
 Every line on the rubric has to show up somewhere on tape. Use this to verify.
 
-- [ ] **Dev environment proof (5)** — VS Code, terminal, `python3`, browser dev server visible at 0:30–1:15
-- [ ] **% own code (10)** — Hendré's verbal claim at 0:30–1:15, reinforced when François and Galen show their source files
-- [ ] **Contribution to DF (10)** — chain of custody, MBR parsing, IOC mining, integrity check (1:15–4:30)
-- [ ] **AI contribution (5)** — both models visibly running, both surfaced in findings (2:15–3:45)
+- [ ] **Dev environment proof (5)** — VS Code, terminal, `python3`, browser dev server visible at 0:25–1:00
+- [ ] **% own code (10)** — Hendré's verbal claim at 0:25–1:00, reinforced when François and Galen show their source files
+- [ ] **Contribution to DF (10)** — chain of custody, MBR parsing, IOC mining, integrity check (1:00–3:30)
+- [ ] **AI contribution (5)** — both models visibly running, both surfaced in findings (1:45–2:55)
 - [ ] **Understanding of AI capability (5)** — Galen walks through both algorithms with reasoning, formulas referenced
-- [ ] **Data preprocessing (5)** — Python image generator (0:30–1:15) + seven-feature vector explanation (2:15–3:45)
-- [ ] **Output and presentation (10)** — every panel of the polished UI on screen from 1:15 onward
-- [ ] **All three speakers on tape** — handoffs at 1:15, 2:15, 3:45, 4:30
+- [ ] **Data preprocessing (5)** — Python image generator (0:25–1:00) + seven-feature vector explanation (1:45–2:55)
+- [ ] **Output and presentation (10)** — every panel of the polished UI on screen from 1:00 onward
+- [ ] **All three speakers on tape** — handoffs at 1:00, 1:45, 2:55, 3:30
 
 ---
 
