@@ -77,7 +77,7 @@ const About: React.FC = () => {
           <h2>Team &amp; Responsibilities</h2>
           <ul className="feature-list">
             <li>
-              <strong>Fran&ccedil;ois Scholtz &mdash; u1924232</strong>
+              <strong>Fran&ccedil;ois Scholtz &mdash; u19024232</strong>
               <br />
               <em>Forensic acquisition &amp; disk-structure engine.</em> Chain-of-custody
               hashing pipeline (hand-written MD5 + Web-Crypto SHA-1/256), MBR boot-signature
