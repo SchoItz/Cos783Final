@@ -73,8 +73,9 @@
   color: #8b949e;
   font-size: 0.9rem;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.6rem;
+  line-height: 1.7;
 }
 
 .feature-list li::before {
@@ -99,11 +100,12 @@
   background-color: #0d1117;
   border: 1px solid #30363d;
   color: #8b949e;
-  padding: 0.1rem 0.5rem;
+  padding: 0.25rem 0.75rem;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   font-weight: 600;
-  margin-left: 0.5rem;
+  margin-left: 0.6rem;
   font-family: monospace;
   letter-spacing: 0.5px;
+  vertical-align: middle;
 }
